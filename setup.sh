@@ -7,6 +7,7 @@ SCRIPT_NAME=$(basename "$0")
 REPO_URL="https://github.com/theaileverage/my-scripts.git"
 REPO_NAME="my-scripts"
 INSTALL_DIR="$HOME/bin"
+REPO_DIR="$HOME/$REPO_NAME"
 BACKUP_SUFFIX=".backup.$(date +%Y%m%d_%H%M%S)"
 
 # Color codes for output
@@ -25,6 +26,7 @@ from theaileverage/my-scripts repository.
 
 Options:
     --install-dir DIR    Specify custom installation directory (default: ~/bin)
+    --repo-dir DIR      Specify custom repository directory (default: ~/$REPO_NAME)
     --repo URL          Specify custom repository URL
     --force            Force installation even if files exist
     --no-backup        Skip backing up existing files
@@ -34,6 +36,7 @@ Example:
     $SCRIPT_NAME                     # Standard installation
     $SCRIPT_NAME --force            # Force installation
     $SCRIPT_NAME --install-dir ~/custom-bin  # Custom installation directory
+    $SCRIPT_NAME --repo-dir ~/dev/my-scripts # Custom repository location
 EOF
 }
 
@@ -45,7 +48,7 @@ log() {
         "error") echo -e "${RED}[ERROR]${NC} $*" ;;
         "success") echo -e "${GREEN}[SUCCESS]${NC} $*" ;;
         "warning") echo -e "${YELLOW}[WARNING]${NC} $*" ;;
-        *) echo -e "$*" ;;
+        "info") echo -e "$*" ;;
     esac
 }
 
@@ -91,6 +94,7 @@ create_link() {
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --install-dir) INSTALL_DIR="$2"; shift ;;
+        --repo-dir) REPO_DIR="$2"; shift ;;
         --repo) REPO_URL="$2"; shift ;;
         --force) FORCE=true ;;
         --no-backup) NO_BACKUP=true ;;
@@ -108,21 +112,24 @@ done
 # Create installation directory if it doesn't exist
 mkdir -p "$INSTALL_DIR"
 
-# Create temporary directory for cloning
-TEMP_DIR=$(mktemp -d)
-log "info" "Created temporary directory: $TEMP_DIR"
-
-# Clone repository
-log "info" "Cloning repository from $REPO_URL..."
-if ! git clone "$REPO_URL" "$TEMP_DIR/$REPO_NAME"; then
-    log "error" "Failed to clone repository"
-    rm -rf "$TEMP_DIR"
-    exit 1
+# Handle repository clone/update
+if [ -d "$REPO_DIR" ]; then
+    log "info" "Repository directory exists, updating..."
+    cd "$REPO_DIR" || exit 1
+    if [ "$FORCE" = "true" ]; then
+        git fetch origin
+        git reset --hard origin/main
+    else
+        git pull
+    fi
+else
+    log "info" "Cloning repository to $REPO_DIR..."
+    git clone "$REPO_URL" "$REPO_DIR"
 fi
 
 # Create symbolic links for scripts
 log "info" "Installing scripts..."
-for script in "$TEMP_DIR/$REPO_NAME/scripts"/*; do
+for script in "$REPO_DIR/scripts"/*; do
     if [ -f "$script" ]; then
         # Make script executable
         chmod +x "$script"
@@ -138,7 +145,7 @@ log "info" "Setting up configurations..."
 CONFIG_DIR="$HOME/.config"
 mkdir -p "$CONFIG_DIR"
 
-for config in "$TEMP_DIR/$REPO_NAME/config"/*; do
+for config in "$REPO_DIR/config"/*; do
     if [ -e "$config" ]; then
         config_name=$(basename "$config")
         create_link "$config" "$CONFIG_DIR/$config_name"
@@ -153,11 +160,12 @@ if ! grep -q "export PATH=\"\$HOME/bin:\$PATH\"" "$SHELL_RC"; then
     log "warning" "Please run 'source $SHELL_RC' to update your PATH"
 fi
 
-# Cleanup
-rm -rf "$TEMP_DIR"
 log "success" "Installation completed successfully!"
 log "info" "You may need to restart your shell or run 'source $SHELL_RC' to use the installed scripts."
 
 # Display installed scripts
 log "info" "Installed scripts:"
 ls -l "$INSTALL_DIR"
+
+# Display repository location
+log "info" "Repository location: $REPO_DIR"

@@ -87,9 +87,9 @@ fi
 start_aider() {
     local mode=$1
     if [ "$mode" = "architect" ]; then
-        local cmd="aider --cache-prompts --chat-mode architect"
+        local cmd="aider --env-file ~/.config/aider/.env --cache-prompts --chat-mode architect --no-show-model-warnings"
     else
-        local cmd="aider --model openrouter/qwen/Qwen2.5-Coder-32B-Instruct --edit-format whole --chat-mode code"
+        local cmd="aider --env-file ~/.config/aider/.env --model openrouter/qwen/Qwen2.5-Coder-32B-Instruct --edit-format whole --chat-mode code --no-show-model-warnings"
     fi
     
     echo "conda activate aider && $cmd"
