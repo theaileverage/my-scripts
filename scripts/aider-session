@@ -1,0 +1,119 @@
+#!/bin/bash
+
+# Script name for help display
+SCRIPT_NAME=$(basename "$0")
+
+# Function to display help message
+show_help() {
+    cat << EOF
+Usage: $SCRIPT_NAME [OPTIONS]
+
+Start or attach to a tmux session with aider development environment.
+The session name will be based on the current directory name.
+
+Options:
+    --check-update    Check and install available updates for aider
+    -h, --help       Show this help message
+
+Examples:
+    $SCRIPT_NAME              # Start or attach to a session
+    $SCRIPT_NAME --check-update    # Check for updates and start/attach to session
+EOF
+}
+
+# Function to get project name from current directory
+get_project_name() {
+    local project_name=$(basename "$(pwd)")
+    # Remove special characters and spaces, replace with underscore
+    project_name=$(echo "$project_name" | sed 's/[^a-zA-Z0-9]/_/g')
+    echo "$project_name"
+}
+
+# Function to check for aider updates
+check_aider_update() {
+    echo "Checking for aider updates..."
+    
+    # Activate conda environment
+    eval "$(conda shell.bash hook)"
+    conda activate aider
+    
+    # Get current version
+    current_version=$(pip show aider-chat | grep Version | cut -d' ' -f2)
+    
+    # Check latest version from PyPI
+    latest_version=$(pip index versions aider-chat | grep aider-chat | head -n 1 | cut -d'(' -f2 | cut -d')' -f1)
+    
+    if [ "$current_version" != "$latest_version" ]; then
+        echo "Update available: $current_version → $latest_version"
+        echo "Updating aider..."
+        pip install --upgrade aider-chat
+        echo "Aider updated successfully!"
+    else
+        echo "Aider is up to date (version $current_version)"
+    fi
+}
+
+# Get the project name
+PROJECT_NAME=$(get_project_name)
+
+# Check if tmux is installed
+if ! command -v tmux >/dev/null 2>&1; then
+    echo "Error: tmux is not installed. Please install tmux first."
+    exit 1
+fi
+
+# Check if conda is installed
+if ! command -v conda >/dev/null 2>&1; then
+    echo "Error: conda is not installed. Please install conda first."
+    exit 1
+fi
+
+# Parse command line arguments
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --check-update) CHECK_UPDATE=1 ;;
+        -h|--help) show_help; exit 0 ;;
+        *) echo "Unknown parameter: $1"; show_help; exit 1 ;;
+    esac
+    shift
+done
+
+# Check for updates if flag is set
+if [ -n "$CHECK_UPDATE" ]; then
+    check_aider_update
+fi
+
+# Function to activate conda environment and start aider
+start_aider() {
+    local mode=$1
+    if [ "$mode" = "architect" ]; then
+        local cmd="aider --cache-prompts --chat-mode architect"
+    else
+        local cmd="aider --model openrouter/qwen/Qwen2.5-Coder-32B-Instruct --edit-format whole --chat-mode code"
+    fi
+    
+    echo "conda activate aider && $cmd"
+}
+
+# Check if session exists
+if tmux has-session -t "$PROJECT_NAME" 2>/dev/null; then
+    echo "Session '$PROJECT_NAME' already exists. Attaching..."
+    tmux attach-session -t "$PROJECT_NAME"
+else
+    echo "Creating new session '$PROJECT_NAME'..."
+    
+    # Create new session with architect pane
+    tmux new-session -d -s "$PROJECT_NAME" "$(start_aider architect)"
+    
+    # Split window vertically and start coder pane
+    tmux split-window -h "$(start_aider code)"
+    
+    # Adjust pane sizes to be equal
+    tmux select-layout -t "$PROJECT_NAME" even-horizontal
+    
+    # Select the first pane
+    tmux select-pane -t 0
+    
+    # Attach to session
+    tmux attach-session -t "$PROJECT_NAME"
+fi
