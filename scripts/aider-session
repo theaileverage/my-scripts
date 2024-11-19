@@ -103,10 +103,12 @@ else
     echo "Creating new session '$PROJECT_NAME'..."
     
     # Create new session with architect pane
-    tmux new-session -d -s "$PROJECT_NAME" "$(start_aider architect)"
+    tmux new-session -d -s "$PROJECT_NAME" 
+    tmux send-keys -t "$PROJECT_NAME:0.0" "$(start_aider architect)" C-m
     
     # Split window vertically and start coder pane
-    tmux split-window -h "$(start_aider code)"
+    tmux split-window -h
+    tmux send-keys -t "$PROJECT_NAME:0.1" "$(start_aider code)" C-m
     
     # Adjust pane sizes to be equal
     tmux select-layout -t "$PROJECT_NAME" even-horizontal
